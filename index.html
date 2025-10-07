@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sort Game</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #333;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+      canvas {
+        background-color: #222;
+        border: 1px solid #fff;
+      }
+      #restartButton {
+        margin-top: 20px;
+        padding: 15px 30px;
+        font-size: 18px;
+        font-weight: bold;
+        color: #fff;
+        background-color: #4caf50;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      #restartButton:hover {
+        background-color: #45a049;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas" width="1600" height="900"></canvas>
+    <button id="restartButton">Restart</button>
+    <script>
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      const restartButton = document.getElementById("restartButton");
+
+      const ballRadius = 20;
+      const colors = {
+        white: "#FFFFFF",
+        cyan: "#00FFFF",
+        yellow: "#FFFF00",
+        magenta: "#FF00FF",
+      };
+      const friction = 0.98;
+      const restitution = 0.8;
+
+      let balls = [
+        { color: colors.cyan },
+        { color: colors.yellow },
+        { color: colors.magenta },
+        { color: colors.cyan },
+        { color: colors.yellow },
+        { color: colors.cyan },
+        { color: colors.magenta },
+        { color: colors.yellow },
+        { color: colors.cyan },
+        { color: colors.yellow },
+        { color: colors.magenta },
+        { color: colors.magenta },
+        { color: colors.cyan },
+      ];
+
+      let cursor = {
+        x: 800,
+        y: 450,
+        prevX: 800,
+        prevY: 450,
+        vx: 0,
+        vy: 0,
+        color: colors.white,
+      };
+
+      let score = 8;
+      let elapsedTime = 0;
+      let gameActive = true;
+      let win = false;
+      let lastTime = performance.now();
+
+      function randomizeBalls() {
+        balls.forEach((ball) => {
+          ball.x = Math.random() * (canvas.width - 2 * ballRadius) + ballRadius;
+          ball.y =
+            Math.random() * (canvas.height - 2 * ballRadius) + ballRadius;
+          ball.vx = 0;
+          ball.vy = 0;
+        });
+      }
+
+      randomizeBalls();
+
+      function drawBall(ball) {
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI * 2);
+        ctx.fillStyle = ball.color;
+        ctx.fill();
+        ctx.closePath();
+      }
+
+      function drawPlus(ball) {
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(ball.x - 10, ball.y);
+        ctx.lineTo(ball.x + 10, ball.y);
+        ctx.moveTo(ball.x, ball.y - 10);
+        ctx.lineTo(ball.x, ball.y + 10);
+        ctx.stroke();
+      }
+
+      function drawUI() {
+        ctx.font = "48px Arial";
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText(score, canvas.width / 2, 100);
+        ctx.font = "24px Arial";
+        ctx.fillText(
+          `Время: ${Math.floor(elapsedTime)}`,
+          canvas.width / 2 - 50,
+          50
+        );
+      }
+
+      function drawGameOver() {
+        ctx.font = "48px Arial";
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText(
+          win ? `Win! Time: ${Math.floor(elapsedTime)} сек` : "Game Over",
+          canvas.width / 2 - 200,
+          canvas.height / 2
+        );
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        balls.forEach(drawBall);
+
+        drawBall(cursor);
+        drawPlus(cursor);
+
+        drawUI();
+
+        if (!gameActive) {
+          drawGameOver();
+        }
+      }
+
+      function update(currentTime) {
+        if (!gameActive) return;
+
+        const dt = (currentTime - lastTime) / 1000;
+        lastTime = currentTime;
+
+        elapsedTime += dt;
+
+        cursor.vx = (cursor.x - cursor.prevX) / dt;
+        cursor.vy = (cursor.y - cursor.prevY) / dt;
+        cursor.prevX = cursor.x;
+        cursor.prevY = cursor.y;
+
+        balls.forEach((ball) => {
+          ball.x += ball.vx * dt;
+          ball.y += ball.vy * dt;
+
+          ball.vx *= friction;
+          ball.vy *= friction;
+
+          if (ball.x < ballRadius) {
+            ball.x = ballRadius;
+            ball.vx = -ball.vx * restitution;
+          } else if (ball.x > canvas.width - ballRadius) {
+            ball.x = canvas.width - ballRadius;
+            ball.vx = -ball.vx * restitution;
+          }
+          if (ball.y < ballRadius) {
+            ball.y = ballRadius;
+            ball.vy = -ball.vy * restitution;
+          } else if (ball.y > canvas.height - ballRadius) {
+            ball.y = canvas.height - ballRadius;
+            ball.vy = -ball.vy * restitution;
+          }
+        });
+
+        for (let i = 0; i < balls.length; i++) {
+          for (let j = i + 1; j < balls.length; j++) {
+            handleBallCollision(balls[i], balls[j]);
+          }
+        }
+
+        balls.forEach((ball) => {
+          handleCursorCollision(ball, cursor);
+        });
+
+        checkSorting();
+      }
+
+      function handleBallCollision(ball1, ball2) {
+        const dx = ball2.x - ball1.x;
+        const dy = ball2.y - ball1.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 2 * ballRadius && dist > 0) {
+          const overlap = 2 * ballRadius - dist;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          ball1.x -= (nx * overlap) / 2;
+          ball1.y -= (ny * overlap) / 2;
+          ball2.x += (nx * overlap) / 2;
+          ball2.y += (ny * overlap) / 2;
+
+          const dvx = ball2.vx - ball1.vx;
+          const dvy = ball2.vy - ball1.vy;
+          const velAlongNormal = dvx * nx + dvy * ny;
+
+          if (velAlongNormal > 0) return;
+
+          const j = (-(1 + restitution) * velAlongNormal) / 2;
+          const impulseX = j * nx;
+          const impulseY = j * ny;
+
+          ball1.vx -= impulseX;
+          ball1.vy -= impulseY;
+          ball2.vx += impulseX;
+          ball2.vy += impulseY;
+        }
+      }
+
+      function handleCursorCollision(ball, cursor) {
+        const dx = ball.x - cursor.x;
+        const dy = ball.y - cursor.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 2 * ballRadius && dist > 0) {
+          const overlap = 2 * ballRadius - dist;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          ball.x += nx * overlap;
+          ball.y += ny * overlap;
+
+          const velAlongNormal =
+            (ball.vx - cursor.vx) * nx + (ball.vy - cursor.vy) * ny;
+
+          if (velAlongNormal > 0) return;
+
+          const j = -(1 + restitution) * velAlongNormal;
+          const impulseX = j * nx;
+          const impulseY = j * ny;
+
+          ball.vx += impulseX;
+          ball.vy += impulseY;
+        }
+      }
+
+      function checkSorting() {
+        const groups = {};
+        const centers = {};
+        balls.forEach((ball) => {
+          if (!groups[ball.color]) groups[ball.color] = [];
+          groups[ball.color].push(ball);
+        });
+
+        let isSorted = true;
+        for (let color in groups) {
+          const list = groups[color];
+          if (list.length < 2) continue;
+
+          let cx = 0,
+            cy = 0;
+          list.forEach((b) => {
+            cx += b.x;
+            cy += b.y;
+          });
+          cx /= list.length;
+          cy /= list.length;
+          centers[color] = { x: cx, y: cy };
+
+          let maxDist = 0;
+          list.forEach((b) => {
+            const d = Math.sqrt((b.x - cx) ** 2 + (b.y - cy) ** 2);
+            if (d > maxDist) maxDist = d;
+          });
+
+          if (maxDist > ballRadius * 4) {
+            isSorted = false;
+            break;
+          }
+        }
+
+        if (isSorted) {
+          const colorKeys = Object.keys(centers);
+          for (let i = 0; i < colorKeys.length; i++) {
+            for (let j = i + 1; j < colorKeys.length; j++) {
+              const c1 = centers[colorKeys[i]];
+              const c2 = centers[colorKeys[j]];
+              const dx = c2.x - c1.x;
+              const dy = c2.y - c1.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < ballRadius * 6) {
+                isSorted = false;
+                break;
+              }
+            }
+            if (!isSorted) break;
+          }
+        }
+
+        if (isSorted) {
+          gameActive = false;
+          win = true;
+          score += 1;
+        }
+      }
+
+      function animate(currentTime) {
+        update(currentTime);
+        draw();
+        requestAnimationFrame(animate);
+      }
+
+      canvas.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        cursor.x = e.clientX - rect.left;
+        cursor.y = e.clientY - rect.top;
+      });
+
+      restartButton.addEventListener("click", () => {
+        randomizeBalls();
+        elapsedTime = 0;
+        gameActive = true;
+        win = false;
+        lastTime = performance.now();
+      });
+
+      requestAnimationFrame(animate);
+    </script>
+  </body>
+</html>
